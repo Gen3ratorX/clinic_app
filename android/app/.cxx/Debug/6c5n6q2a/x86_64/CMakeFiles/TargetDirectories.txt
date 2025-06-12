@@ -1,0 +1,2 @@
+D:/Software Projects/clinic_app/android/app/.cxx/Debug/6c5n6q2a/x86_64/CMakeFiles/edit_cache.dir
+D:/Software Projects/clinic_app/android/app/.cxx/Debug/6c5n6q2a/x86_64/CMakeFiles/rebuild_cache.dir

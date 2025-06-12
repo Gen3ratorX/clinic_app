@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "272709137362",
+    "project_id": "pentecost-clinic",
+    "storage_bucket": "pentecost-clinic.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:272709137362:android:57cf8f215fe2d00c27ce0b",
+        "android_client_info": {
+          "package_name": "com.pentecostclinic.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbuOcIy_HS9gHlyozcT0V7Ej04ZyrP3lc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

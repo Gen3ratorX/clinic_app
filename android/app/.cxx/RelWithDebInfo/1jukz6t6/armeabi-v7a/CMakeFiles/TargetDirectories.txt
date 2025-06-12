@@ -1,0 +1,2 @@
+C:/Users/Administrator/Desktop/clinic_app-main/android/app/.cxx/RelWithDebInfo/1jukz6t6/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/Users/Administrator/Desktop/clinic_app-main/android/app/.cxx/RelWithDebInfo/1jukz6t6/armeabi-v7a/CMakeFiles/rebuild_cache.dir
