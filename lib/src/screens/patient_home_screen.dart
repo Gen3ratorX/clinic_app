@@ -8,7 +8,7 @@ import 'profile_screen.dart';
 import 'ai_screen.dart';
 import 'chat/chat_list_screen.dart';
 import 'appointment_screen.dart';
-import 'homescreen/dashboard_screen.dart';
+import 'dashboard_screen.dart';
 
 class PatientHomeScreen extends StatefulWidget {
   const PatientHomeScreen({super.key});
@@ -27,11 +27,14 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> {
     final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     _screens = [
-      const PatientDashboardScreen(),
+      PatientDashboardScreen(
+        currentUserId: userId,
+        userType: 'user', // or 'patient', depending on your system
+      ),
       const AppointmentScreen(),
       ChatListScreen(
         currentUserId: userId,
-        userType: 'user', // you can also use 'patient' if preferred
+        userType: 'user',
       ),
       const AIScreen(),
       const PatientProfileScreen(),
