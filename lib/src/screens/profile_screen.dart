@@ -1,5 +1,122 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+// Data model for user profile
+class UserProfile {
+  final String firstName;
+  final String lastName;
+  final String phone;
+  final String email;
+  final String address;
+  final String weight;
+  final String height;
+  final String bloodGroup;
+  final String gender;
+  final DateTime dateOfBirth;
+  final List<EmergencyContact> emergencyContacts;
+  final List<String> allergies;
+  final List<String> conditions;
+  final bool pushNotifications;
+  final bool emailNotifications;
+  final bool smsNotifications;
+
+  UserProfile({
+    required this.firstName,
+    required this.lastName,
+    required this.phone,
+    required this.email,
+    required this.address,
+    required this.weight,
+    required this.height,
+    required this.bloodGroup,
+    required this.gender,
+    required this.dateOfBirth,
+    required this.emergencyContacts,
+    required this.allergies,
+    required this.conditions,
+    required this.pushNotifications,
+    required this.emailNotifications,
+    required this.smsNotifications,
+  });
+
+  // Convert UserProfile to Firestore map
+  Map<String, dynamic> toMap() {
+    return {
+      'firstName': firstName,
+      'lastName': lastName,
+      'phone': phone,
+      'email': email,
+      'address': address,
+      'weight': weight,
+      'height': height,
+      'bloodGroup': bloodGroup,
+      'gender': gender,
+      'dateOfBirth': Timestamp.fromDate(dateOfBirth),
+      'emergencyContacts': emergencyContacts.map((e) => e.toMap()).toList(),
+      'allergies': allergies,
+      'conditions': conditions,
+      'pushNotifications': pushNotifications,
+      'emailNotifications': emailNotifications,
+      'smsNotifications': smsNotifications,
+    };
+  }
+
+  // Create UserProfile from Firestore document
+  factory UserProfile.fromMap(Map<String, dynamic> data) {
+    return UserProfile(
+      firstName: data['firstName'] ?? '',
+      lastName: data['lastName'] ?? '',
+      phone: data['phone'] ?? '',
+      email: data['email'] ?? '',
+      address: data['address'] ?? '',
+      weight: data['weight'] ?? '',
+      height: data['height'] ?? '',
+      bloodGroup: data['bloodGroup'] ?? 'O+',
+      gender: data['gender'] ?? 'Female',
+      dateOfBirth: (data['dateOfBirth'] as Timestamp?)?.toDate() ?? DateTime(1990, 3, 15),
+      emergencyContacts: (data['emergencyContacts'] as List<dynamic>?)
+          ?.map((e) => EmergencyContact.fromMap(e as Map<String, dynamic>))
+          .toList() ??
+          [],
+      allergies: List<String>.from(data['allergies'] ?? []),
+      conditions: List<String>.from(data['conditions'] ?? []),
+      pushNotifications: data['pushNotifications'] ?? true,
+      emailNotifications: data['emailNotifications'] ?? true,
+      smsNotifications: data['smsNotifications'] ?? false,
+    );
+  }
+}
+
+class EmergencyContact {
+  final String name;
+  final String phone;
+  final String relationship;
+
+  EmergencyContact({
+    required this.name,
+    required this.phone,
+    required this.relationship,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'phone': phone,
+      'relationship': relationship,
+    };
+  }
+
+  factory EmergencyContact.fromMap(Map<String, dynamic> data) {
+    return EmergencyContact(
+      name: data['name'] ?? '',
+      phone: data['phone'] ?? '',
+      relationship: data['relationship'] ?? '',
+    );
+  }
+}
 
 class PatientProfileScreen extends StatefulWidget {
   const PatientProfileScreen({super.key});
@@ -13,27 +130,28 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
   late AnimationController _headerController;
 
   // Controllers for text fields
-  final TextEditingController _firstNameController = TextEditingController(text: "Sarah");
-  final TextEditingController _lastNameController = TextEditingController(text: "Johnson");
-  final TextEditingController _phoneController = TextEditingController(text: "+1 234-567-8900");
-  final TextEditingController _emailController = TextEditingController(text: "sarah.johnson@email.com");
-  final TextEditingController _addressController = TextEditingController(text: "123 Main St, City, State 12345");
-  final TextEditingController _weightController = TextEditingController(text: "65 kg");
-  final TextEditingController _heightController = TextEditingController(text: "170 cm");
+  late TextEditingController _firstNameController;
+  late TextEditingController _lastNameController;
+  late TextEditingController _phoneController;
+  late TextEditingController _emailController;
+  late TextEditingController _addressController;
+  late TextEditingController _weightController;
+  late TextEditingController _heightController;
   String _selectedBloodGroup = 'O+';
   String _selectedGender = 'Female';
   DateTime _selectedDate = DateTime(1990, 3, 15);
 
   // Sample data
-  List<EmergencyContact> emergencyContacts = [
-    EmergencyContact(name: "John Doe", phone: "+1 234-567-8900", relationship: "Spouse"),
-    EmergencyContact(name: "Jane Smith", phone: "+1 234-567-8901", relationship: "Sister"),
-  ];
-  List<String> allergies = ["Penicillin", "Shellfish", "Peanuts"];
-  List<String> conditions = ["Hypertension", "Diabetes Type 2"];
+  List<EmergencyContact> emergencyContacts = [];
+  List<String> allergies = [];
+  List<String> conditions = [];
   bool pushNotifications = true;
   bool emailNotifications = true;
   bool smsNotifications = false;
+
+  bool _isLoading = true;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  User? _currentUser;
 
   @override
   void initState() {
@@ -47,8 +165,93 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
       vsync: this,
     );
 
+    _initializeFirebaseAndData();
+
     _headerController.forward();
     _fabController.forward();
+  }
+
+  Future<void> _initializeFirebaseAndData() async {
+    try {
+      // Ensure Firebase is initialized
+      await Firebase.initializeApp();
+      _currentUser = FirebaseAuth.instance.currentUser;
+      if (_currentUser != null) {
+        await _loadUserProfile();
+      } else {
+        // Handle unauthenticated user
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please sign in to view your profile.')),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error initializing profile: $e')),
+      );
+    }
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      DocumentSnapshot doc = await _firestore.collection('users').doc(_currentUser!.uid).get();
+      if (doc.exists) {
+        final userProfile = UserProfile.fromMap(doc.data() as Map<String, dynamic>);
+        setState(() {
+          _firstNameController = TextEditingController(text: userProfile.firstName);
+          _lastNameController = TextEditingController(text: userProfile.lastName);
+          _phoneController = TextEditingController(text: userProfile.phone);
+          _emailController = TextEditingController(text: userProfile.email);
+          _addressController = TextEditingController(text: userProfile.address);
+          _weightController = TextEditingController(text: userProfile.weight);
+          _heightController = TextEditingController(text: userProfile.height);
+          _selectedBloodGroup = userProfile.bloodGroup;
+          _selectedGender = userProfile.gender;
+          _selectedDate = userProfile.dateOfBirth;
+          emergencyContacts = userProfile.emergencyContacts;
+          allergies = userProfile.allergies;
+          conditions = userProfile.conditions;
+          pushNotifications = userProfile.pushNotifications;
+          emailNotifications = userProfile.emailNotifications;
+          smsNotifications = userProfile.smsNotifications;
+          _isLoading = false;
+        });
+      } else {
+        // Initialize with default values if no document exists
+        _initializeDefaultControllers();
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading profile: $e')),
+      );
+    }
+  }
+
+  void _initializeDefaultControllers() {
+    _firstNameController = TextEditingController(text: "Sarah");
+    _lastNameController = TextEditingController(text: "Johnson");
+    _phoneController = TextEditingController(text: "+1 234-567-8900");
+    _emailController = TextEditingController(text: "sarah.johnson@email.com");
+    _addressController = TextEditingController(text: "123 Main St, City, State 12345");
+    _weightController = TextEditingController(text: "65 kg");
+    _heightController = TextEditingController(text: "170 cm");
+    emergencyContacts = [
+      EmergencyContact(name: "John Doe", phone: "+1 234-567-8900", relationship: "Spouse"),
+      EmergencyContact(name: "Jane Smith", phone: "+1 234-567-8901", relationship: "Sister"),
+    ];
+    allergies = ["Penicillin", "Shellfish", "Peanuts"];
+    conditions = ["Hypertension", "Diabetes Type 2"];
   }
 
   @override
@@ -67,6 +270,12 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       extendBodyBehindAppBar: true,
@@ -235,7 +444,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
                     ),
                     child: Center(
                       child: Text(
-                        '${_firstNameController.text[0]}${_lastNameController.text[0]}',
+                        '${_firstNameController.text.isNotEmpty ? _firstNameController.text[0] : ''}${_lastNameController.text.isNotEmpty ? _lastNameController.text[0] : ''}',
                         style: const TextStyle(
                           fontSize: 42,
                           fontWeight: FontWeight.w900,
@@ -269,8 +478,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
                     child: InkWell(
                       borderRadius: BorderRadius.circular(20),
                       onTap: () {
-                        // Handle profile picture change with haptic feedback
-                        // HapticFeedback.lightImpact();
+                        // Handle profile picture change
                       },
                       child: Container(
                         padding: const EdgeInsets.all(12),
@@ -309,7 +517,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              'Patient ID: PAT-2024-001',
+              'Patient ID: ${_currentUser?.uid ?? 'PAT-2024-001'}',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -529,6 +737,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
                   onSelected: (value) {
                     if (value == 'delete') {
                       setState(() => emergencyContacts.remove(contact));
+                      _saveProfile(); // Save to Firestore after deletion
                     } else if (value == 'edit') {
                       _editEmergencyContact(contact);
                     }
@@ -576,7 +785,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
             value: _selectedBloodGroup,
             items: ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'],
             icon: Icons.bloodtype_rounded,
-            onChanged: (val) => setState(() => _selectedBloodGroup = val!),
+            onChanged: (val) => setState(() {
+              _selectedBloodGroup = val!;
+              _saveProfile(); // Save to Firestore on change
+            }),
           ),
           const SizedBox(height: 24),
           _buildMedicalCard(
@@ -690,7 +902,10 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => setState(() => list.remove(item)),
+          onTap: () {
+            setState(() => list.remove(item));
+            _saveProfile(); // Save to Firestore after removal
+          },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
@@ -725,21 +940,30 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
             title: 'Push Notifications',
             subtitle: 'Receive notifications on your device',
             value: pushNotifications,
-            onChanged: (value) => setState(() => pushNotifications = value),
+            onChanged: (value) {
+              setState(() => pushNotifications = value);
+              _saveProfile(); // Save to Firestore on change
+            },
             icon: Icons.notifications_active_rounded,
           ),
           _buildModernSwitchTile(
             title: 'Email Notifications',
             subtitle: 'Receive notifications via email',
             value: emailNotifications,
-            onChanged: (value) => setState(() => emailNotifications = value),
+            onChanged: (value) {
+              setState(() => emailNotifications = value);
+              _saveProfile(); // Save to Firestore on change
+            },
             icon: Icons.email_rounded,
           ),
           _buildModernSwitchTile(
             title: 'SMS Notifications',
             subtitle: 'Receive notifications via text message',
             value: smsNotifications,
-            onChanged: (value) => setState(() => smsNotifications = value),
+            onChanged: (value) {
+              setState(() => smsNotifications = value);
+              _saveProfile(); // Save to Firestore on change
+            },
             icon: Icons.sms_rounded,
           ),
         ],
@@ -1080,6 +1304,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
     );
     if (picked != null) {
       setState(() => _selectedDate = picked);
+      _saveProfile(); // Save to Firestore on change
     }
   }
 
@@ -1277,6 +1502,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
                         relationship: relationship,
                       ));
                     });
+                    _saveProfile(); // Save to Firestore after addition
                     Navigator.pop(context);
                   }
                 },
@@ -1372,6 +1598,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
                         relationship: relationship,
                       );
                     });
+                    _saveProfile(); // Save to Firestore after edit
                     Navigator.pop(context);
                   }
                 },
@@ -1465,6 +1692,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
                 onTap: () {
                   if (newAllergy.isNotEmpty) {
                     setState(() => allergies.add(newAllergy));
+                    _saveProfile(); // Save to Firestore after addition
                     Navigator.pop(context);
                   }
                 },
@@ -1527,6 +1755,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
                 onTap: () {
                   if (newCondition.isNotEmpty) {
                     setState(() => conditions.add(newCondition));
+                    _saveProfile(); // Save to Firestore after addition
                     Navigator.pop(context);
                   }
                 },
@@ -1548,51 +1777,76 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> with Ticker
     );
   }
 
-  void _saveProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
+  void _saveProfile() async {
+    if (_currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to save your profile.')),
+      );
+      return;
+    }
+
+    try {
+      final userProfile = UserProfile(
+        firstName: _firstNameController.text,
+        lastName: _lastNameController.text,
+        phone: _phoneController.text,
+        email: _emailController.text,
+        address: _addressController.text,
+        weight: _weightController.text,
+        height: _heightController.text,
+        bloodGroup: _selectedBloodGroup,
+        gender: _selectedGender,
+        dateOfBirth: _selectedDate,
+        emergencyContacts: emergencyContacts,
+        allergies: allergies,
+        conditions: conditions,
+        pushNotifications: pushNotifications,
+        emailNotifications: emailNotifications,
+        smsNotifications: smsNotifications,
+      );
+
+      await _firestore.collection('users').doc(_currentUser!.uid).set(
+        userProfile.toMap(),
+        SetOptions(merge: true),
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Color(0xFF10B981),
+                  size: 20,
+                ),
               ),
-              child: const Icon(
-                Icons.check_rounded,
-                color: Color(0xFF10B981),
-                size: 20,
+              const SizedBox(width: 12),
+              const Text(
+                'Profile saved successfully!',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Profile saved successfully!',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
-            ),
-          ],
+            ],
+          ),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
         ),
-        backgroundColor: const Color(0xFF10B981),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving profile: $e')),
+      );
+    }
   }
-}
-
-class EmergencyContact {
-  final String name;
-  final String phone;
-  final String relationship;
-
-  EmergencyContact({
-    required this.name,
-    required this.phone,
-    required this.relationship,
-  });
 }

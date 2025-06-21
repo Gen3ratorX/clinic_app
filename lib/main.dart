@@ -10,6 +10,7 @@ import 'src/screens/patient_home_screen.dart';
 import 'src/screens/terms_screen.dart';
 import 'src/services/notification_service.dart';
 
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();

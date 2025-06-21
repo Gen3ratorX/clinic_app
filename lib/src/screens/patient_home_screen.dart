@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'custom_bottom_nav.dart';
 import 'profile_screen.dart';
 import 'ai_screen.dart';
-import 'chat_screen.dart';
+import 'chat/chat_list_screen.dart';
 import 'appointment_screen.dart';
 import 'homescreen/dashboard_screen.dart';
 
@@ -18,14 +19,24 @@ class PatientHomeScreen extends StatefulWidget {
 
 class _PatientHomeScreenState extends State<PatientHomeScreen> {
   int _currentIndex = 0;
+  late final List<Widget> _screens;
 
-  final List<Widget> _screens = [
-    const PatientDashboardScreen(),
-    const AppointmentScreen(),
-    const MessagingScreen(),
-    const AIScreen(),
-    const PatientProfileScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    _screens = [
+      const PatientDashboardScreen(),
+      const AppointmentScreen(),
+      ChatListScreen(
+        currentUserId: userId,
+        userType: 'user', // you can also use 'patient' if preferred
+      ),
+      const AIScreen(),
+      const PatientProfileScreen(),
+    ];
+  }
 
   Future<bool> _onWillPop() async {
     if (_currentIndex == 0) {

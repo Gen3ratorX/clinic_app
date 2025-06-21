@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'appointments_section.dart';
 
 class QuickActionsBar extends StatelessWidget {
   final Color primaryColor;

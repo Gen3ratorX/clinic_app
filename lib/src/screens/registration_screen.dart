@@ -18,7 +18,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> with TickerProv
   final _formKey = GlobalKey<FormState>();
 
   // Controllers
-  final _surnameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _firstNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -545,7 +545,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> with TickerProv
         );
         String uid = userCredential.user!.uid;
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'surname': _surnameController.text.trim(),
+          'lastName': _lastNameController.text.trim(),
           'firstName': _firstNameController.text.trim(),
           'email': _emailController.text.trim(),
           'phone': _phoneController.text.trim(),
@@ -784,7 +784,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> with TickerProv
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
                                       _buildEnhancedTextField(
-                                        controller: _surnameController,
+                                        controller: _lastNameController,
                                         label: 'Surname',
                                         icon: Icons.person,
                                         textCapitalization: TextCapitalization.words,
@@ -949,7 +949,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> with TickerProv
     _fadeController.dispose();
     _pulseController.stop();
     _pulseController.dispose();
-    _surnameController.dispose();
+    _lastNameController.dispose();
     _firstNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
