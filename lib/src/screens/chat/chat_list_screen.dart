@@ -5,7 +5,6 @@ import 'chat.dart';
 import 'chat_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-
 class ChatListScreen extends StatefulWidget {
   final String currentUserId;
   final String userType; // 'doctor' or 'user'
@@ -580,15 +579,15 @@ class _ChatListScreenState extends State<ChatListScreen>
                   context,
                   MaterialPageRoute(
                     builder: (context) => ChatScreen(
-                    chatId: null,
-                    currentUserId: widget.currentUserId,
-                    userType: widget.userType,
-                    otherUserId: doctorId,
-                    doctorId: doctorId,
-                    userId: widget.currentUserId,
-                    otherUserName: doctorName,
-                    otherUserSubtitle: specialization,
-                    encryptionKey:encryptionKey,
+                      chatId: null,
+                      currentUserId: widget.currentUserId,
+                      userType: widget.userType,
+                      otherUserId: doctorId,
+                      doctorId: doctorId,
+                      userId: widget.currentUserId,
+                      otherUserName: doctorName,
+                      otherUserSubtitle: specialization,
+                      encryptionKey:encryptionKey,
                     ),
                   ),
                 );

@@ -317,10 +317,14 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           return _buildErrorState();
         }
 
-        if (snapshot.connectionState == ConnectionState.waiting ||
-            !snapshot.hasData ||
-            snapshot.data?.data() == null) {
+        // Only show loading if we've never had data before
+        if (!snapshot.hasData && snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingState();
+        }
+
+        // Handle case where document doesn't exist yet
+        if (!snapshot.hasData || snapshot.data?.data() == null) {
+          return _buildEmptyState();
         }
 
         final data = snapshot.data!.data() as Map<String, dynamic>;
@@ -792,3 +796,4 @@ class MessageBubble extends StatelessWidget {
     return colors[index.abs()];
   }
 }
+
