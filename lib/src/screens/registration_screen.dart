@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../services/notification_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 
 enum PasswordStrength { veryWeak, weak, medium, strong, veryStrong }
 
@@ -52,6 +53,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> with TickerProv
   final Color primaryColor = const Color(0xFF00796B);       // Teal
   final Color lightPrimaryColor = const Color(0xFFB2DFDB);  // Mint
   final Color accentColor = const Color(0xFF004D40);        // Dark Teal
+  Future<void> saveFCMTokenToFirestore(String uid) async {
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null) {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'fcmToken': token,
+      });
+    }
+  }
 
 
   @override
@@ -379,15 +388,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> with TickerProv
             borderRadius: BorderRadius.circular(6),
           ),
           child: InkWell(
-            onTap: () async {
+            onTap: () {
               HapticFeedback.lightImpact();
-              if (!_hasReadTerms) {
-                await NotificationService().showNotification(
-                  id: 3,
-                  title: "Action Required",
-                  body: "Please read and accept the Terms & Conditions first.",
-                );
-              } else {
+              if (_hasReadTerms) {
                 setState(() {
                   _termsAccepted = !_termsAccepted;
                 });
@@ -423,6 +426,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> with TickerProv
       ],
     );
   }
+
 
   Widget _buildCreateAccountButton() {
     return AnimatedContainer(
@@ -553,6 +557,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> with TickerProv
           'gender': _selectedGender,
           'createdAt': FieldValue.serverTimestamp(),
         });
+// ✅ Save FCM token
+        await saveFCMTokenToFirestore(uid);
 
         HapticFeedback.heavyImpact();
         _showSuccessAnimation();

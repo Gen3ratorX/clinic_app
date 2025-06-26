@@ -7,7 +7,7 @@ import 'custom_bottom_nav.dart';
 import 'profile_screen.dart';
 import 'ai_screen.dart';
 import 'chat/chat_list_screen.dart';
-import 'appointment_screen.dart';
+import 'appointment_screen .dart';
 import 'dashboard_screen.dart';
 
 class PatientHomeScreen extends StatefulWidget {

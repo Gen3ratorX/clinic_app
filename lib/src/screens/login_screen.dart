@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -125,11 +128,13 @@ class _LoginScreenState extends State<LoginScreen>
 
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
+
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-
       print("Login successful");
+      await saveFCMTokenToFirestore();
+
 
 
       // Success haptic feedback
@@ -180,6 +185,17 @@ class _LoginScreenState extends State<LoginScreen>
     } finally {
       setState(() {
         _isLoading = false;
+      });
+    }
+  }
+  Future<void> saveFCMTokenToFirestore() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+        'fcmToken': token,
       });
     }
   }

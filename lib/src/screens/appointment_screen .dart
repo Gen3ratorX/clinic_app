@@ -6,6 +6,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'user_report_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+
 class AppointmentScreen extends StatefulWidget {
   const AppointmentScreen({super.key});
 
@@ -52,6 +56,8 @@ class _AppointmentScreenState extends State<AppointmentScreen>
     '04:00 PM',
     '04:30 PM',
   ];
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+  FlutterLocalNotificationsPlugin();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -60,6 +66,30 @@ class _AppointmentScreenState extends State<AppointmentScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _initializeFirebase();
+    _initializeFCM();
+    _setupLocalNotifications(); // Call it here (no await needed)
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      RemoteNotification? notification = message.notification;
+      AndroidNotification? android = message.notification?.android;
+
+      if (notification != null && android != null) {
+        flutterLocalNotificationsPlugin.show(
+          notification.hashCode,
+          notification.title,
+          notification.body,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              'appointments_channel',
+              'Appointment Notifications',
+              channelDescription: 'For doctor appointment alerts',
+              importance: Importance.max,
+              priority: Priority.high,
+            ),
+          ),
+        );
+      }
+    });
   }
 
   Future<void> _initializeFirebase() async {
@@ -83,6 +113,37 @@ class _AppointmentScreenState extends State<AppointmentScreen>
       );
     }
   }
+
+
+  final FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+  Future<void> _initializeFCM() async {
+    try {
+      await messaging.requestPermission();
+
+      final fcmToken = await messaging.getToken();
+      final currentUser = FirebaseAuth.instance.currentUser;
+
+      if (currentUser != null && fcmToken != null) {
+        await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).update({
+          'fcmToken': fcmToken,
+        });
+      }
+    } catch (e) {
+      print("Error initializing FCM: $e");
+    }
+  }
+
+  Future<void> _setupLocalNotifications() async {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+    AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const InitializationSettings initializationSettings =
+    InitializationSettings(android: initializationSettingsAndroid);
+
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
+
 
   @override
   void dispose() {
@@ -1323,7 +1384,6 @@ class _AppointmentScreenState extends State<AppointmentScreen>
     ];
     return months[month - 1];
   }
-
   void _bookAppointment() async {
     if (_currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1333,7 +1393,9 @@ class _AppointmentScreenState extends State<AppointmentScreen>
     }
 
     HapticFeedback.mediumImpact();
-    print('Booking appointment with doctorId: $selectedDoctorId'); // Debug log
+    print('Booking appointment with doctorId: $selectedDoctorId');
+
+    String? newAppointmentId;
 
     try {
       await _firestore.runTransaction((transaction) async {
@@ -1344,9 +1406,16 @@ class _AppointmentScreenState extends State<AppointmentScreen>
             .where('timeSlot', isEqualTo: selectedTimeSlot)
             .where('status', whereIn: ['pending', 'confirmed'])
             .get();
+
+        print('Slot query docs: ${slotQuery.docs.length}');
         if (slotQuery.docs.isNotEmpty) {
           throw Exception('Time slot already booked.');
         }
+
+        final newDoc = _firestore.collection('appointments').doc();
+        newAppointmentId = newDoc.id;
+        print('New Appointment ID: $newAppointmentId');
+
         final appointment = {
           'userId': _currentUser!.uid,
           'doctorId': selectedDoctorId,
@@ -1359,10 +1428,56 @@ class _AppointmentScreenState extends State<AppointmentScreen>
           'symptoms': symptoms.isNotEmpty ? symptoms : null,
           'createdAt': Timestamp.now(),
         };
-        final newDoc = _firestore.collection('appointments').doc();
+
         transaction.set(newDoc, appointment);
-        print('Appointment booked with ID: ${newDoc.id}'); // Debug log
       });
+
+      // Send notification to doctor's tokens
+      final tokensSnapshot = await _firestore
+          .collection('doctors')
+          .doc(selectedDoctorId)
+          .collection('tokens')
+          .get();
+
+      String userName = 'a patient';
+      bool notificationSent = false;
+
+      try {
+        final userDoc = await _firestore.collection('users').doc(_currentUser!.uid).get();
+        if (userDoc.exists) {
+          final data = userDoc.data();
+          final firstName = data?['firstName'] ?? '';
+          final lastName = data?['lastName'] ?? '';
+          userName = '$firstName $lastName'.trim();
+          if (userName.isEmpty) userName = 'a patient';
+        }
+      } catch (e) {
+        print('Error fetching user name from Firestore: $e');
+      }
+
+      if (tokensSnapshot.docs.isNotEmpty) {
+        for (var tokenDoc in tokensSnapshot.docs) {
+          final doctorFcmToken = tokenDoc.data()['fcmToken'];
+          try {
+            await _firestore.collection('notifications').add({
+              'title': 'New Appointment',
+              'to': doctorFcmToken,
+              'userId': _currentUser!.uid,
+              'processed': false,
+              'data': {
+                'route': '/doctor-appointments',
+                'appointmentId': newAppointmentId,
+                'timestamp': DateTime.now().millisecondsSinceEpoch.toString(),
+              },
+              'timestamp': FieldValue.serverTimestamp(),
+            });
+            print('✅ Notification added for token: $doctorFcmToken');
+            notificationSent = true;
+          } catch (e) {
+            print('❌ Error adding notification for token $doctorFcmToken: $e');
+          }
+        }
+      }
 
       showDialog(
         context: context,
@@ -1383,17 +1498,23 @@ class _AppointmentScreenState extends State<AppointmentScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Your appointment has been successfully scheduled.',
-                  style: GoogleFonts.roboto(fontSize: 14),
-                ),
+                Text('Your appointment has been successfully scheduled.', style: GoogleFonts.roboto(fontSize: 14)),
                 const SizedBox(height: 15),
                 Text('Details:', style: GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.bold)),
                 Text('Doctor: $selectedDoctor', style: GoogleFonts.roboto(fontSize: 14)),
                 Text('Department: $selectedDepartment', style: GoogleFonts.roboto(fontSize: 14)),
                 Text('Date: ${DateFormat('MMMM d, yyyy').format(selectedDate)}', style: GoogleFonts.roboto(fontSize: 14)),
                 Text('Time: $selectedTimeSlot', style: GoogleFonts.roboto(fontSize: 14)),
-                if (symptoms.isNotEmpty) Text('Symptoms: $symptoms', style: GoogleFonts.roboto(fontSize: 14)),
+                if (symptoms.isNotEmpty)
+                  Text('Symptoms: $symptoms', style: GoogleFonts.roboto(fontSize: 14)),
+                if (!notificationSent)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text(
+                      'Note: The doctor has not enabled notifications.',
+                      style: GoogleFonts.roboto(fontSize: 14, color: Colors.orange),
+                    ),
+                  ),
               ],
             ),
             actions: [
@@ -1417,10 +1538,10 @@ class _AppointmentScreenState extends State<AppointmentScreen>
         },
       );
     } catch (e) {
+      print('❌ Booking error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error booking appointment: $e. Please try again.')),
       );
-      print('Booking error: $e'); // Debug log
     }
   }
 

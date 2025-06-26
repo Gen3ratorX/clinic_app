@@ -1,4 +1,4 @@
-import 'package:clinic_app/src/screens/appointment_screen.dart';
+import 'appointment_screen .dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'user_report_screen.dart';

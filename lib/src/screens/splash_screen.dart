@@ -3,6 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 
 class SplashScreen extends StatefulWidget {
   final bool? isLoggedIn;
@@ -24,6 +27,19 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   late final Animation<double> _rotateAnim;
   late final Animation<double> _pulseAnim;
   late final Animation<double> _bgShiftAnim;
+
+  Future<void> saveFCMTokenToFirestore() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+        'fcmToken': token,
+      });
+    }
+  }
+
 
   @override
   void initState() {
@@ -57,23 +73,29 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Future<void> _handleNavigation() async {
     if (widget.isLoggedIn != null) {
       if (widget.isLoggedIn == true) {
+        await saveFCMTokenToFirestore(); // ✅ Save FCM token
         Navigator.of(context).pushReplacementNamed('/patientHome');
       } else {
         Navigator.of(context).pushReplacementNamed('/login');
       }
       return;
     }
+
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
+      await saveFCMTokenToFirestore(); // ✅ Save FCM token
       Navigator.of(context).pushReplacementNamed('/patientHome');
       return;
     }
+
     const storage = FlutterSecureStorage();
     final email = await storage.read(key: 'email');
     final password = await storage.read(key: 'password');
+
     if (email != null && password != null) {
       try {
         await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
+        await saveFCMTokenToFirestore(); // ✅ Save FCM token
         if (mounted) Navigator.of(context).pushReplacementNamed('/patientHome');
       } catch (_) {
         if (mounted) Navigator.of(context).pushReplacementNamed('/login');
@@ -82,6 +104,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       if (mounted) Navigator.of(context).pushReplacementNamed('/register');
     }
   }
+
 
   @override
   void dispose() {
